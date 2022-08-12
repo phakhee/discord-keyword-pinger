@@ -1,7 +1,4 @@
 python-dotenv~=0.20.0
 discord-py-slash-command
 pyrebase4
-discord.py-pagination
-discord.py
-interactions-wait-for
-pip install -U dinteractions-Paginator
+dinteractions-Paginator
