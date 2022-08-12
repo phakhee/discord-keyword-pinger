@@ -3,7 +3,7 @@ from threading import Thread
 from dotenv import load_dotenv
 from classes.StreamHandler import stream_handler
 from interactions.ext.paginator import Page, Paginator
-from interactions import Client, Intents, Message, Option, OptionType, CommandContext, Embed, Channel
+from interactions import Client, Intents, Message, Option, OptionType, CommandContext, Embed, Channel, Role
 
 load_dotenv()
 
@@ -73,6 +73,7 @@ async def on_message(message: Message):
                     for keywords_entry in keywords_for_channel:
                         keywords_id = list(keywords_entry.keys())[0]
                         keywords = keywords_entry[keywords_id]["keywords"]
+                        role = keywords_entry[keywords_id]["role"]
                         delay = keywords_entry[keywords_id]["delay"]
                         contains_keywords = True
 
@@ -96,6 +97,7 @@ async def on_message(message: Message):
 
                                 channel: Channel = await message.get_channel()
                                 await channel.send(embeds=[embed])
+                                await channel.send(f"<@&{role}>")
                                 stream_handler.add_ping(keywords_id)
 
     except Exception as e:
@@ -185,10 +187,16 @@ async def all_keywords(ctx: CommandContext):
             description="The amount of seconds the interval needs to be between pings when keyword is found.",
             type=OptionType.INTEGER,
             required=True
+        ),
+        Option(
+            name="role",
+            description="The role it needs to mention when keyword is pinged.",
+            type=OptionType.ROLE,
+            required=True
         )
     ]
 )
-async def add_keyword(ctx: CommandContext, keywords: str, channel: Channel, delay: int):
+async def add_keyword(ctx: CommandContext, keywords: str, channel: Channel, delay: int, role: Role):
     if is_allowed(ctx.author.roles):
         data = {
             "keywords": keywords.split(" "),
@@ -196,7 +204,8 @@ async def add_keyword(ctx: CommandContext, keywords: str, channel: Channel, dela
                 "id": str(channel.id),
                 "name": str(channel.name)
             },
-            "delay": delay
+            "delay": delay,
+            "role": str(role.id)
         }
 
         entry_id = stream_handler.add_keywords(data)
@@ -208,6 +217,7 @@ async def add_keyword(ctx: CommandContext, keywords: str, channel: Channel, dela
         embed.add_field(name="Channel", value=str(channel.name))
         embed.add_field(name="Delay", value=str(delay))
         embed.add_field(name="ID", value=entry_id)
+        embed.add_field(name="Role", value=str(role.id))
         embed.set_footer(icon_url=webhook_icon, text=webhook_name)
 
         await ctx.send(embeds=[embed])
