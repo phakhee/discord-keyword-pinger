@@ -100,7 +100,6 @@ def divide_chunks(l, n):
 async def all_keywords(ctx: CommandContext):
     keywords_entries = stream_handler.all_keywords()
     embed_string = ""
-    index = 1
     embeds = []
 
     if len(keywords_entries) > 0:
@@ -122,7 +121,6 @@ async def all_keywords(ctx: CommandContext):
             )
             embed.set_footer(icon_url=webhook_icon, text=webhook_name)
             embeds.append(embed)
-            index += 1
             embed_string = ""
 
     else:
