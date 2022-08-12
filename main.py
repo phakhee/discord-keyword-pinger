@@ -14,6 +14,8 @@ webhook_color = int(os.getenv("WEBHOOK_COLOR"))
 webhook_icon = os.getenv("WEBHOOK_ICON")
 webhook_name = os.getenv("WEBHOOK_NAME")
 
+allowed_roles = os.getenv("ALLOWED_ROLES").split(",")
+
 client = Client(
     token=discord_token,
     default_scope=guild_id,
@@ -24,6 +26,15 @@ client = Client(
 @client.event
 async def on_ready():
     print(f"{webhook_name} is online")
+
+
+def is_allowed(user_roles):
+    u_roles = [str(role) for role in user_roles]
+    for role in u_roles:
+        if role in allowed_roles:
+            return True
+
+    return False
 
 
 @client.event(name="on_message_create")
@@ -96,24 +107,40 @@ def divide_chunks(l, n):
         yield l[i:i + n]
 
 
-@client.command(name="allkeywords", description="Gets all saved keywords.", scope=guild_id)
+@client.command(
+    name="allkeywords",
+    description="Gets all saved keywords.",
+    scope=guild_id,
+)
 async def all_keywords(ctx: CommandContext):
-    keywords_entries = stream_handler.all_keywords()
-    embed_string = ""
-    embeds = []
+    if is_allowed(ctx.author.roles):
+        keywords_entries = stream_handler.all_keywords()
+        embed_string = ""
+        embeds = []
 
-    if len(keywords_entries) > 0:
-        partitioned_keywords_entries = list(divide_chunks(keywords_entries, 10))
+        if len(keywords_entries) > 0:
+            partitioned_keywords_entries = list(divide_chunks(keywords_entries, 10))
 
-        for entries_partition in partitioned_keywords_entries:
-            for keywords_entry in entries_partition:
-                keywords_id = list(keywords_entry.keys())[0]
+            for entries_partition in partitioned_keywords_entries:
+                for keywords_entry in entries_partition:
+                    keywords_id = list(keywords_entry.keys())[0]
 
-                embed_string += f"ID: {keywords_id}\n"
-                embed_string += f"Channel: #{keywords_entry[keywords_id]['channel']['name']}\n"
-                embed_string += f"Keyword(s): {', '.join(keywords_entry[keywords_id]['keywords'])}\n\n"
+                    embed_string += f"ID: {keywords_id}\n"
+                    embed_string += f"Channel: #{keywords_entry[keywords_id]['channel']['name']}\n"
+                    embed_string += f"Keyword(s): {', '.join(keywords_entry[keywords_id]['keywords'])}\n\n"
 
-            embed_string = f"```{embed_string}```"
+                embed_string = f"```{embed_string}```"
+                embed = Embed(
+                    title="All keyword(s)",
+                    color=webhook_color,
+                    description=embed_string
+                )
+                embed.set_footer(icon_url=webhook_icon, text=webhook_name)
+                embeds.append(embed)
+                embed_string = ""
+
+        else:
+            embed_string = "No keyword(s) found."
             embed = Embed(
                 title="All keyword(s)",
                 color=webhook_color,
@@ -121,27 +148,18 @@ async def all_keywords(ctx: CommandContext):
             )
             embed.set_footer(icon_url=webhook_icon, text=webhook_name)
             embeds.append(embed)
-            embed_string = ""
 
+        if len(embeds) == 1:
+            await ctx.send(embeds=embeds)
+        else:
+            embeds = [Page(embeds=[embed]) for embed in embeds]
+            await Paginator(
+                client=client,
+                ctx=ctx,
+                pages=embeds,
+            ).run()
     else:
-        embed_string = "No keyword(s) found."
-        embed = Embed(
-            title="All keyword(s)",
-            color=webhook_color,
-            description=embed_string
-        )
-        embed.set_footer(icon_url=webhook_icon, text=webhook_name)
-        embeds.append(embed)
-
-    if len(embeds) == 1:
-        await ctx.send(embeds=embeds)
-    else:
-        embeds = [Page(embeds=[embed]) for embed in embeds]
-        await Paginator(
-            client=client,
-            ctx=ctx,
-            pages=embeds,
-        ).run()
+        await ctx.send("User is not allowed to run this command")
 
 
 # Bot command where you can add a keyword.
@@ -171,27 +189,30 @@ async def all_keywords(ctx: CommandContext):
     ]
 )
 async def add_keyword(ctx: CommandContext, keywords: str, channel: Channel, delay: int):
-    data = {
-        "keywords": keywords.split(" "),
-        "channel": {
-            "id": str(channel.id),
-            "name": str(channel.name)
-        },
-        "delay": delay
-    }
+    if is_allowed(ctx.author.roles):
+        data = {
+            "keywords": keywords.split(" "),
+            "channel": {
+                "id": str(channel.id),
+                "name": str(channel.name)
+            },
+            "delay": delay
+        }
 
-    entry_id = stream_handler.add_keywords(data)
-    embed = Embed(
-        title="Added new keyword!",
-        color=webhook_color
-    )
-    embed.add_field(name="Keyword(s)", value=keywords)
-    embed.add_field(name="Channel", value=str(channel.name))
-    embed.add_field(name="Delay", value=str(delay))
-    embed.add_field(name="ID", value=entry_id)
-    embed.set_footer(icon_url=webhook_icon, text=webhook_name)
+        entry_id = stream_handler.add_keywords(data)
+        embed = Embed(
+            title="Added new keyword!",
+            color=webhook_color
+        )
+        embed.add_field(name="Keyword(s)", value=keywords)
+        embed.add_field(name="Channel", value=str(channel.name))
+        embed.add_field(name="Delay", value=str(delay))
+        embed.add_field(name="ID", value=entry_id)
+        embed.set_footer(icon_url=webhook_icon, text=webhook_name)
 
-    await ctx.send(embeds=[embed])
+        await ctx.send(embeds=[embed])
+    else:
+        await ctx.send("User is not allowed to run this command")
 
 
 @client.command(
@@ -214,25 +235,28 @@ async def add_keyword(ctx: CommandContext, keywords: str, channel: Channel, dela
     ]
 )
 async def remove_keyword(ctx: CommandContext, keywords: str, channel: Channel):
-    deleted_ids = stream_handler.remove_keywords(keywords, channel.id)
-    embed_string = ""
+    if is_allowed(ctx.author.roles):
+        deleted_ids = stream_handler.remove_keywords(keywords, channel.id)
+        embed_string = ""
 
-    if len(deleted_ids) > 0:
-        for deleted_id in deleted_ids:
-            embed_string += f"{deleted_id}\n"
+        if len(deleted_ids) > 0:
+            for deleted_id in deleted_ids:
+                embed_string += f"{deleted_id}\n"
 
-        embed_string = f"```{embed_string}```"
+            embed_string = f"```{embed_string}```"
+        else:
+            embed_string = f"No keywords saved with **{keywords}**"
+
+        embed = Embed(
+            title="Deleted keyword(s)",
+            color=webhook_color
+        )
+        embed.add_field("ID", value=embed_string)
+        embed.set_footer(icon_url=webhook_icon, text=webhook_name)
+
+        await ctx.send(embeds=[embed])
     else:
-        embed_string = f"No keywords saved with **{keywords}**"
-
-    embed = Embed(
-        title="Deleted keyword(s)",
-        color=webhook_color
-    )
-    embed.add_field("ID", value=embed_string)
-    embed.set_footer(icon_url=webhook_icon, text=webhook_name)
-
-    await ctx.send(embeds=[embed])
+        await ctx.send("User is not allowed to run this command")
 
 
 # Separate thread to stream realtime database.
